@@ -4,3 +4,23 @@ venv/
 
 #bigdata
 Imgdata/
+
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+data/
+outputs/checkpoints/
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.svs
+*.tif
+*.tiff
+*.ndpi
+*.mrxs
+
+.DS_Store
+.env
