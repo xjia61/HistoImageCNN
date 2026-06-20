@@ -12,7 +12,7 @@ def main():
 
     history = plot_training_history(
         checkpoint_path=checkpoint_path,
-        output_dir=PROJECT_ROOT / "outputs" / "figures"/"RESNET18_2",
+        output_dir=PROJECT_ROOT / "outputs" / "figures"/"RESNET18_3",
         show=True
     )
 

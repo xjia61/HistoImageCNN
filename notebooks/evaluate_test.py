@@ -47,13 +47,13 @@ def main():
     )
 
     # 4. Rebuild the same model architecture
-    model = get_model("resnet18", num_classes=2)
+    model = get_model("efficientnet_b0", num_classes=2)
 
     # 5. Load checkpoint and evaluate on test set
     device = get_device()
 
     #checkpoint_path = PROJECT_ROOT / "outputs" / "checkpoints" / "simple_cnn_best.pt"
-    checkpoint_path = PROJECT_ROOT / "outputs" / "checkpoints" / "resnet18_best.pt"
+    checkpoint_path = PROJECT_ROOT / "outputs" / "checkpoints" / "efficientnet_b0_best.pt"
 
 
     metrics = evaluate_model(
@@ -61,7 +61,7 @@ def main():
         test_loader=test_loader,
         device=device,
         checkpoint_path=checkpoint_path,
-        output_dir=PROJECT_ROOT / "outputs" / "figures"/"resnet18_2",
+        output_dir=PROJECT_ROOT / "outputs" / "figures"/"efficientnet_3",
         class_names=["no_cancer", "cancer"]
     )
 

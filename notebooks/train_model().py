@@ -44,7 +44,8 @@ from src.models import get_model
 from src.train import train_model
 
 model = get_model(
-    model_name="resnet18",
+    #model_name="resnet18",
+    model_name = "efficientnet_b0", 
     num_classes=2,
     pretrained=True,
     freeze_backbone=False
@@ -54,9 +55,9 @@ model, history = train_model(
     model=model,
     train_loader=train_loader,
     val_loader=val_loader,
-    num_epochs=10,
-    learning_rate=1e-6,
+    num_epochs=5,
+    learning_rate=3e-6,
     weight_decay=1e-4,
     checkpoint_dir=PROJECT_ROOT / "outputs" / "checkpoints",
-    model_name="resnet18"
+    model_name="efficientnet_b0"
 )
