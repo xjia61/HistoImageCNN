@@ -12,8 +12,6 @@ print("Current directory:", Path.cwd())
 print("Project root:", PROJECT_ROOT)
 
 
-
-
 from src.dataset import build_image_dataframe
 from src.split import split_by_patient, check_patient_overlap
 from src.dataloader import create_dataloaders
@@ -38,27 +36,36 @@ print("Image batch shape:", images.shape)
 print("Label batch shape:", labels.shape)
 print("Labels:", labels)
 
-
-
 from src.models import get_model
-from src.train import train_model
+from src.train import get_device
+from src.ensemble import evaluate_ensemble
 
-model = get_model(
+device = get_device()
+
+resnet_model = get_model(
     model_name="resnet18",
-    #model_name = "efficientnet_b0", 
     num_classes=2,
-    pretrained=True,
-    freeze_backbone=False
+    pretrained=False
 )
 
-model, history = train_model(
-    model=model,
-    train_loader=train_loader,
-    val_loader=val_loader,
-    num_epochs=1,
-    learning_rate=1e-5,
-    weight_decay=1e-4,
-    checkpoint_dir=PROJECT_ROOT / "outputs" / "checkpoints",
-    #model_name="efficientnet_b0"
-    model_name="resnet18"
+efficientnet_model = get_model(
+    model_name="efficientnet_b0",
+    num_classes=2,
+    pretrained=False
+)
+
+resnet_checkpoint = PROJECT_ROOT / "outputs" / "checkpoints" / "resnet18_best.pt"
+efficientnet_checkpoint = PROJECT_ROOT / "outputs" / "checkpoints" / "efficientnet_b0_best.pt"
+
+metrics = evaluate_ensemble(
+    resnet_model=resnet_model,
+    efficientnet_model=efficientnet_model,
+    test_loader=test_loader,
+    device=device,
+    resnet_checkpoint=resnet_checkpoint,
+    efficientnet_checkpoint=efficientnet_checkpoint,
+    resnet_weight=0.4,
+    efficientnet_weight=0.6,
+    threshold=0.5,
+    class_names=["no_cancer", "cancer"]
 )

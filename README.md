@@ -1,8 +1,10 @@
-# Histology Image CNN Classification
+# Histology Image Classification with CNN Transfer Learning
 
-A local PyTorch-based deep learning project for binary histology image classification. The goal is to classify histology image tiles into **no cancer** and **cancer** categories using convolutional neural networks and transfer learning.
+A local PyTorch-based deep learning project for binary histology tile classification. The goal is to classify histology image tiles into **no cancer** and **cancer** categories using CNN-based models, transfer learning, patient-level data splitting, and clinically relevant evaluation metrics.
 
-This project focuses on building a reproducible image classification pipeline, understanding key model parameters, comparing CNN architectures, and evaluating model performance using clinically relevant metrics.
+This project focuses not only on model training, but also on understanding model behavior, preventing data leakage, comparing different CNN architectures, evaluating class-specific performance, and exploring ensemble strategies to improve cancer detection.
+
+---
 
 ## Project Overview
 
@@ -18,12 +20,6 @@ Imgdata/
 │   └── 1/
 ```
 
-Each image is converted into a dataframe containing:
-
-```text
-image_path | patient_id | label
-```
-
 Label mapping:
 
 ```text
@@ -31,28 +27,48 @@ Label mapping:
 1 = cancer
 ```
 
-To avoid data leakage, the dataset is split at the **patient level**, meaning images from the same patient are never shared across training, validation, and test sets.
+Each image is parsed into a dataframe with the following columns:
+
+| Column       | Description               |
+| ------------ | ------------------------- |
+| `path`       | Local image file path     |
+| `patient_id` | Patient identifier        |
+| `label`      | 0 = no cancer, 1 = cancer |
+
+The task is a **tile-level binary classification problem**.
+
+---
 
 ## Why Patient-Level Split Matters
 
-In histology image classification, images from the same patient may share staining patterns, scanner artifacts, tissue processing features, and background characteristics. If images from the same patient appear in both training and test sets, the model may learn patient-specific artifacts instead of true cancer morphology.
+A major concern in histology image classification is **data leakage**.
 
-Therefore, this project uses patient-level train/validation/test splitting.
+Images from the same patient may share staining patterns, scanner features, tissue processing artifacts, and background characteristics. If images from the same patient are split across training and test sets, the model may learn patient-specific features instead of true cancer morphology.
+
+To reduce this risk, this project uses **patient-level train/validation/test splitting**, so all images from the same patient appear in only one split.
+
+```text
+patient_001 → train only
+patient_002 → validation only
+patient_003 → test only
+```
+
+---
 
 ## Project Structure
 
 ```text
 HISTOIMAG/
-├── Imgdata/                  # local image data, not committed to GitHub
+├── Imgdata/                  # Local image data, not committed to GitHub
 ├── data/
-│   └── splits/               # saved train/val/test CSV files
+│   └── splits/               # Optional saved train/val/test CSV files
 ├── notebooks/
 │   ├── test.py
 │   ├── evaluate_test.py
 │   └── plot_history.py
 ├── outputs/
-│   ├── checkpoints/          # saved model weights, not committed
-│   └── figures/              # training curves, confusion matrix
+│   ├── checkpoints/          # Saved model weights, not committed to GitHub
+│   └── figures/              # Confusion matrix, training curves, ROC curves
 ├── src/
 │   ├── __init__.py
 │   ├── dataset.py
@@ -61,18 +77,27 @@ HISTOIMAG/
 │   ├── models.py
 │   ├── train.py
 │   ├── evaluate.py
+│   ├── ensemble.py
 │   └── visualize.py
 ├── requirements.txt
 ├── .gitignore
 └── README.md
 ```
 
+---
+
 ## Local Environment Setup
+
+Create and activate a virtual environment:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+```
 
+Install dependencies:
+
+```bash
 pip install torch torchvision torchaudio
 pip install numpy pandas matplotlib scikit-learn pillow tqdm
 pip install jupyter ipykernel
@@ -93,11 +118,13 @@ else:
 print("Using device:", device)
 ```
 
-This project was run locally using Apple GPU acceleration through PyTorch MPS.
+This project was run locally using **PyTorch MPS** on Apple Silicon.
+
+---
 
 ## Data Processing
 
-The image dataframe is generated from the folder structure:
+The image dataframe is built from the folder structure:
 
 ```python
 from src.dataset import build_image_dataframe
@@ -109,15 +136,16 @@ print(df["label"].value_counts())
 print(df["patient_id"].nunique())
 ```
 
-The dataframe contains:
+Example dataframe:
 
-| Column       | Description               |
-| ------------ | ------------------------- |
-| `path`       | Path to image file        |
-| `patient_id` | Patient identifier        |
-| `label`      | 0 = no cancer, 1 = cancer |
+| path                             | patient_id  | label |
+| -------------------------------- | ----------- | ----- |
+| Imgdata/patient_001/0/image1.png | patient_001 | 0     |
+| Imgdata/patient_001/1/image2.png | patient_001 | 1     |
 
-## Patient-Level Data Split
+---
+
+## Patient-Level Train/Validation/Test Split
 
 ```python
 from src.split import split_by_patient, check_patient_overlap
@@ -127,7 +155,7 @@ train_df, val_df, test_df = split_by_patient(df)
 check_patient_overlap(train_df, val_df, test_df)
 ```
 
-Expected result:
+Expected output:
 
 ```text
 Train-Val overlap: set()
@@ -136,9 +164,11 @@ Val-Test overlap: set()
 Patient-level split check passed.
 ```
 
-## DataLoader
+---
 
-Images are resized, augmented, normalized, and loaded into PyTorch DataLoaders.
+## DataLoader and Image Preprocessing
+
+Images are loaded using a custom PyTorch `Dataset` and `DataLoader`.
 
 Training transformations include:
 
@@ -153,20 +183,43 @@ Normalize
 
 Validation and test images use deterministic preprocessing without random augmentation.
 
+Example:
+
+```python
+from src.dataloader import create_dataloaders
+
+train_loader, val_loader, test_loader = create_dataloaders(
+    train_df,
+    val_df,
+    test_df,
+    image_size=224,
+    batch_size=32,
+    num_workers=0
+)
+```
+
+---
+
 ## Models
 
-This project compares multiple CNN-based approaches:
+This project compares several CNN-based models:
 
-| Model                        | Description                                 |
-| ---------------------------- | ------------------------------------------- |
-| SimpleCNN                    | Baseline CNN trained from scratch           |
-| ResNet18                     | ImageNet-pretrained transfer learning model |
-| ResNet18 frozen backbone     | Only final classifier layer is trained      |
-| ResNet18 partial fine-tuning | Later layers and classifier are fine-tuned  |
+| Model                               | Description                                             |
+| ----------------------------------- | ------------------------------------------------------- |
+| SimpleCNN                           | Baseline CNN trained from scratch                       |
+| ResNet18                            | ImageNet-pretrained transfer learning model             |
+| ResNet18 frozen backbone            | Only the final classification layer is trained          |
+| ResNet18 fine-tuning                | Full or partial model fine-tuning                       |
+| EfficientNet-B0                     | Lightweight ImageNet-pretrained transfer learning model |
+| ResNet18 + EfficientNet-B0 Ensemble | Probability-based ensemble combining both models        |
+
+The SimpleCNN model serves as a learning baseline. ResNet18 and EfficientNet-B0 are used as professional transfer learning baselines. The ensemble model explores whether complementary model behavior can improve cancer detection.
+
+---
 
 ## Training
 
-Example training command in Python:
+Example ResNet18 fine-tuning:
 
 ```python
 from src.models import get_model
@@ -191,11 +244,15 @@ model, history = train_model(
 )
 ```
 
-The best model is saved based on the lowest validation loss.
+The best model checkpoint is saved based on the **lowest validation loss**.
 
-## Evaluation
+This is important because validation accuracy and validation loss may not always improve together. Accuracy only measures correct versus incorrect predictions, while loss also reflects prediction confidence.
 
-The trained model is evaluated on the held-out test set using:
+---
+
+## Evaluation Metrics
+
+Models are evaluated using:
 
 ```text
 Accuracy
@@ -204,43 +261,29 @@ Recall
 F1-score
 ROC-AUC
 Confusion matrix
+Class-specific performance
+False-negative review
+False-positive review
 ```
 
-Example evaluation:
+For this pathology-style classification task, **cancer recall** is especially important because false-negative cancer predictions are clinically concerning.
 
-```python
-from src.models import get_model
-from src.train import get_device
-from src.evaluate import evaluate_model
+---
 
-device = get_device()
+## Preliminary Model Results
 
-model = get_model(
-    model_name="resnet18",
-    num_classes=2,
-    pretrained=False
-)
-
-metrics = evaluate_model(
-    model=model,
-    test_loader=test_loader,
-    device=device,
-    checkpoint_path="outputs/checkpoints/resnet18_best.pt",
-    output_dir="outputs/figures",
-    class_names=["no_cancer", "cancer"]
-)
-```
-
-## Preliminary Results
-
-### Simple CNN Baseline
+### SimpleCNN Baseline
 
 | Metric              |  Value |
 | ------------------- | -----: |
-| Train accuracy      | 0.8688 |
-| Validation accuracy | 0.8582 |
 | Train loss          | 0.3125 |
+| Train accuracy      | 0.8688 |
 | Validation loss     | 0.3166 |
+| Validation accuracy | 0.8582 |
+
+The SimpleCNN baseline confirmed that the local training pipeline was functional, but its performance was lower than pretrained transfer learning models.
+
+---
 
 ### ResNet18 Transfer Learning
 
@@ -249,7 +292,9 @@ metrics = evaluate_model(
 | Best validation loss     | 0.2292 |
 | Best validation accuracy | 0.9053 |
 
-The pretrained ResNet18 model improved validation performance compared with the SimpleCNN baseline, suggesting that transfer learning is useful for histology tile classification.
+ResNet18 improved validation performance compared with the SimpleCNN baseline, suggesting that transfer learning is useful for histology tile classification.
+
+---
 
 ### Lower Learning Rate ResNet18 Run
 
@@ -260,62 +305,172 @@ The pretrained ResNet18 model improved validation performance compared with the 
 
 This run showed slower but stable improvement. Validation performance plateaued around 0.90 accuracy, suggesting that the model may be approaching the performance limit of the current dataset and training setup.
 
-### Efficientnet_b0 Transfer Learning
+---
 
-| Metric                   |  Value |
-| ------------------------ | -----: |
-| Best validation loss     | 0.2366 |
-| Best validation accuracy | 0.9003 |
+## Model Behavior
 
-The pretrained Efficientnet_b0 model had simily validation performance ocompared with the ResNet18 model, but improved the recall score which is more importiant in Histology Image Classification.
+ResNet18 and EfficientNet-B0 showed different strengths:
 
+| Model           | Observed Strength                                   |
+| --------------- | --------------------------------------------------- |
+| ResNet18        | Better no-cancer class performance                  |
+| EfficientNet-B0 | Better cancer recall                                |
+| Ensemble        | Balances cancer sensitivity and false-positive rate |
 
-## Interpretation
+This suggests that the two pretrained models may learn complementary features from the histology tiles.
 
-The model reached approximately 0.90 validation accuracy with ResNet18 transfer learning. Validation loss and accuracy showed small fluctuations after reaching this level, which likely represents a performance plateau rather than severe overfitting.
+---
 
-The close training and validation performance suggests reasonable generalization. Further improvement may require:
+## Ensemble Strategy
+
+The ensemble combines predicted cancer probabilities from ResNet18 and EfficientNet-B0.
+
+Instead of combining hard class labels, the ensemble averages probabilities:
 
 ```text
-More patients
-Better tile-level labels
-Misclassified image review
-Stain normalization
-Mild color augmentation
-Partial fine-tuning
-Dropout regularization
-Class imbalance handling
+Final cancer probability =
+0.4 × ResNet18 cancer probability +
+06 × EfficientNet-B0 cancer probability
 ```
 
-## Next Steps
+The final class is determined by a probability threshold:
 
-Planned improvements:
+```text
+if final cancer probability >= threshold:
+    predict cancer
+else:
+    predict no_cancer
+```
 
-1. Evaluate all models on the same held-out test set.
-2. Compare SimpleCNN, ResNet18 frozen, and ResNet18 fine-tuned models.
-3. Review false positive and false negative images.
-4. Save misclassified image examples for error analysis.
-5. Add ROC curve and precision-recall curve.
-6. Add experiment tracking table.
-7. Explore partial fine-tuning of ResNet18 layer4 and classifier head.
-8. Consider stain normalization for histology-specific preprocessing.
+A lower threshold increases cancer sensitivity, while a higher threshold reduces false positives.
+
+---
+
+## Ensemble Test Results
+
+### Threshold = 0.5
+
+| Metric           |  Value |
+| ---------------- | -----: |
+| Accuracy         | 0.8809 |
+| Cancer precision | 0.8095 |
+| Cancer recall    | 0.8008 |
+| Cancer F1-score  | 0.8051 |
+| ROC-AUC          | 0.9442 |
+
+Confusion matrix:
+
+```text
+[[26409  2407]
+ [ 2545 10230]]
+```
+
+Interpretation:
+
+```text
+False positives: 2407
+False negatives: 2545
+```
+
+Threshold 0.5 produced a more balanced model with higher overall accuracy and higher cancer precision.
+
+---
+
+### Threshold = 0.4
+
+| Metric           |  Value |
+| ---------------- | -----: |
+| Accuracy         | 0.8751 |
+| Cancer precision | 0.7681 |
+| Cancer recall    | 0.8503 |
+| Cancer F1-score  | 0.8071 |
+| ROC-AUC          | 0.9442 |
+
+Confusion matrix:
+
+```text
+[[25536  3280]
+ [ 1913 10862]]
+```
+
+Interpretation:
+
+```text
+False positives: 3280
+False negatives: 1913
+```
+
+Lowering the threshold from 0.5 to 0.4 increased cancer recall from **0.8008 to 0.8503** and reduced false-negative cancer predictions from **2545 to 1913**, at the cost of more false positives.
+
+---
+
+## Threshold Comparison
+
+| Threshold | Accuracy | Cancer Precision | Cancer Recall | Cancer F1 | False Positives | False Negatives |
+| --------: | -------: | ---------------: | ------------: | --------: | --------------: | --------------: |
+|       0.4 |   0.8751 |           0.7681 |        0.8503 |    0.8071 |            3280 |            1913 |
+|       0.5 |   0.8809 |           0.8095 |        0.8008 |    0.8051 |            2407 |            2545 |
+
+Threshold 0.5 is more conservative and has fewer false positives. Threshold 0.4 is more cancer-sensitive and has fewer false negatives.
+
+For a cancer detection or screening-oriented task, threshold 0.4 may be preferable because it improves cancer recall. For a balanced classifier, threshold 0.5 may be preferable.
+
+---
+
+## Current Interpretation
+
+The pretrained transfer learning models outperformed the SimpleCNN baseline. ResNet18 achieved strong validation performance, while EfficientNet-B0 appeared to provide better cancer recall. The ensemble model achieved a high ROC-AUC of **0.9442**, indicating strong ability to separate cancer from no-cancer tiles.
+
+The threshold analysis demonstrates an important clinical trade-off:
+
+```text
+Lower threshold → higher cancer recall, fewer false negatives, more false positives
+Higher threshold → higher precision, fewer false positives, more false negatives
+```
+
+This project therefore emphasizes not only overall accuracy, but also cancer recall, false-negative reduction, and class-specific model behavior.
+
+---
 
 ## Key Learning Points
 
 This project demonstrates:
 
 ```text
-Patient-level split to avoid data leakage
+Patient-level splitting to avoid data leakage
 PyTorch Dataset and DataLoader design
-CNN baseline training
-Transfer learning with pretrained ResNet18
+Local CNN training using Apple MPS
+Baseline CNN training from scratch
+Transfer learning with ResNet18 and EfficientNet-B0
 Fine-tuning strategy comparison
-Validation loss vs validation accuracy interpretation
+Validation loss versus validation accuracy interpretation
 Model checkpointing
-Confusion matrix and ROC-AUC evaluation
-Histology-specific error analysis
+Class-specific evaluation
+Cancer recall analysis
+Probability-based model ensembling
+Threshold tuning
+False-negative and false-positive trade-off analysis
 ```
+
+---
+
+## Next Steps
+
+Planned improvements:
+
+1. Evaluate individual ResNet18 and EfficientNet-B0 models on the same held-out test set.
+2. Add a complete model comparison table for SimpleCNN, ResNet18, EfficientNet-B0, and ensemble models.
+3. Review false-negative cancer images to identify common failure patterns.
+4. Save representative false-positive and false-negative examples.
+5. Add ROC curve and precision-recall curve visualizations.
+6. Add Grad-CAM heatmaps for model interpretability.
+7. Explore partial ResNet18 fine-tuning of later layers only.
+8. Test mild stain/color augmentation.
+9. Consider stain normalization for histology-specific preprocessing.
+10. Explore slide-level aggregation or multiple-instance learning in future work.
+
+---
 
 ## Notes
 
-Large image files, model checkpoints, and raw data are not committed to GitHub. Only source code, documentation, and selected result figures are included.
+Raw histology images, large model checkpoints, and local output files are not committed to GitHub. The repository is intended to include source code, documentation, selected figures, and summarized experiment results.
