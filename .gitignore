@@ -12,6 +12,7 @@ __pycache__/
 
 data/
 outputs/checkpoints/
+outputs/error_analysis
 *.pt
 *.pth
 *.h5
