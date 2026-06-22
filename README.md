@@ -430,6 +430,107 @@ Higher threshold → higher precision, fewer false positives, more false negativ
 
 This project therefore emphasizes not only overall accuracy, but also cancer recall, false-negative reduction, and class-specific model behavior.
 
+## Error Analysis
+
+To better understand model behavior beyond aggregate metrics, this project includes false-positive and false-negative image review.
+
+The ensemble model outputs a cancer probability for each test tile. Based on the selected probability threshold, each prediction is categorized as:
+
+```text
+true positive  = true cancer, predicted cancer
+true negative  = true no_cancer, predicted no_cancer
+false negative = true cancer, predicted no_cancer
+false positive = true no_cancer, predicted cancer
+```
+
+False negatives are particularly important in this project because they represent cancer-positive tiles that were missed by the model.
+
+### Error Analysis Workflow
+
+The error analysis script saves:
+
+```text
+all_predictions_threshold_<threshold>.csv
+false_negative_threshold_<threshold>.csv
+false_positive_threshold_<threshold>.csv
+```
+
+It also copies representative false-negative and false-positive images into separate folders for manual review:
+
+```text
+outputs/error_analysis/
+└── ensemble_threshold_0.4/
+    ├── all_predictions_threshold_0.4.csv
+    ├── false_negative_threshold_0.4.csv
+    ├── false_positive_threshold_0.4.csv
+    ├── false_negative/
+    │   ├── FN_00001_prob_0.023_patient_xxx_image.png
+    │   └── ...
+    └── false_positive/
+        ├── FP_00001_prob_0.982_patient_xxx_image.png
+        └── ...
+```
+
+### False-Negative Review
+
+False negatives are defined as:
+
+```text
+true label = cancer
+predicted label = no_cancer
+```
+
+These images are reviewed to identify possible causes of missed cancer detection, such as:
+
+```text
+small tumor area within the tile
+subtle tumor morphology
+mostly stromal or necrotic tissue
+poor staining
+blurred or out-of-focus image
+tissue artifact
+possible label noise
+```
+
+### False-Positive Review
+
+False positives are defined as:
+
+```text
+true label = no_cancer
+predicted label = cancer
+```
+
+These images are reviewed to identify patterns that may cause the model to overcall cancer, such as:
+
+```text
+inflammation
+reactive atypia
+dark staining
+folded tissue
+crush artifact
+poor image quality
+possible mislabeled no-cancer tile
+```
+
+### Why Error Analysis Matters
+
+Error analysis helps determine whether model performance is limited by:
+
+```text
+model architecture
+insufficient training
+class imbalance
+threshold choice
+poor image quality
+ambiguous histology
+tile-level label noise
+dataset limitations
+```
+
+This step is important for computational pathology because high-level metrics such as accuracy and ROC-AUC do not fully explain why a model fails on specific images. Reviewing false-negative and false-positive examples provides insight into model behavior and helps guide future improvements in data quality, labeling strategy, preprocessing, and model design.
+
+
 ---
 
 ## Key Learning Points
